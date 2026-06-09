@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Donut Rush</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #ffe4e1;
+        }
+
+        #game-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .pixel-font {
+            font-weight: bold;
+            text-shadow: 2px 2px 0px #000;
+        }
+
+        /* Simple animation for UI */
+        @keyframes float {
+            0% {
+                transform: translateY(0px);
+            }
+
+            50% {
+                transform: translateY(-10px);
+            }
+
+            100% {
+                transform: translateY(0px);
+            }
+        }
+
+        .floating {
+            animation: float 3s ease-in-out infinite;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Game Container for Three.js -->
+    <div id="game-container"></div>
+
+    <!-- UI Overlay -->
+    <div id="ui-layer" class="absolute inset-0 pointer-events-none flex flex-col justify-between p-6">
+
+        <!-- Header / Score -->
+        <div class="flex justify-between items-start">
+            <div
+                class="bg-white/80 backdrop-blur-md rounded-2xl p-4 border-b-4 border-pink-500 shadow-lg pointer-events-auto">
+                <p class="text-pink-600 font-bold text-sm">Score</p>
+                <h2 id="score" class="text-4xl font-black text-pink-500">0</h2>
+            </div>
+
+            <div
+                class="hidden md:block bg-white/80 backdrop-blur-md rounded-2xl p-4 border-b-4 border-blue-500 shadow-lg">
+                <p class="text-gray-600 font-bold text-sm">High Score</p>
+                <h2 id="high-score" class="text-2xl font-black text-blue-500">0</h2>
+            </div>
+        </div>
+
+        <!-- Controls Hint -->
+        <div id="controls-hint" class="text-center transition-opacity duration-500 opacity-0">
+            <div class="inline-block bg-black/50 text-white px-6 py-2 rounded-full backdrop-blur-sm">
+                Controls ⬅️ ⬆️ ➡️ to Move
+            </div>
+        </div>
+    </div>
+
+    <!-- Start Screen -->
+    <div id="start-screen"
+        class="absolute inset-0 flex items-center justify-center bg-black/80 z-50 backdrop-blur-md transition-opacity duration-500">
+        <div class="text-center max-w-md p-8 bg-white rounded-3xl shadow-2xl border-b-8 border-pink-400 floating">
+            <h1 class="text-6xl font-black text-pink-500 mb-2 tracking-tighter">Donut Rush</h1>
+            <h2 class="text-2xl font-bold text-gray-700 mb-6">The Sweet Escape</h2>
+
+            <p class="text-gray-500 mb-8 text-lg leading-relaxed">
+                Avoid Giant Donuts & Coffee Cups! 🍩 <br>
+                Collect Golden Coins! 🪙<br>
+                Use your Arrow Keys to run and jump!
+            </p>
+
+            <button id="start-btn"
+                class="pointer-events-auto bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white text-2xl font-bold py-4 px-12 rounded-full shadow-lg transform transition hover:scale-105 active:scale-95 border-b-4 border-pink-700">
+                START GAME
+            </button>
+        </div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="game-over-screen"
+        class="hidden absolute inset-0 flex items-center justify-center bg-black/80 z-50 backdrop-blur-sm">
+        <div class="text-center max-w-md p-8 bg-white rounded-3xl shadow-2xl border-b-8 border-red-500">
+            <h1 class="text-5xl font-black text-red-500 mb-2">Crash & Burn! </h1>
+            <p class="text-gray-600 mb-6 text-xl">The coffee was scalding hot!</p>
+
+            <div class="bg-gray-100 rounded-xl p-4 mb-8">
+                <p class="text-gray-500 text-sm">Your Final Score </p>
+                <p id="final-score" class="text-4xl font-black text-gray-800">0</p>
+            </div>
+
+            <button id="restart-btn"
+                class="pointer-events-auto bg-blue-500 hover:bg-blue-600 text-white text-xl font-bold py-3 px-10 rounded-full shadow-lg transform transition hover:scale-105 border-b-4 border-blue-700">
+                Play Again
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Game Constants
+        const LANE_WIDTH = 3; // Width of each lane
+        const LANES = [-LANE_WIDTH, 0, LANE_WIDTH]; // Left, Center, Right
+        const GAME_SPEED_START = 0.4;
+        const JUMP_HEIGHT = 2.5;
+        const JUMP_DURATION = 0.6; // Seconds
+
+        // State
+        let gameState = {
+            isPlaying: false,
+            score: 0,
+            highScore: 0,
+            speed: GAME_SPEED_START,
+            laneIndex: 1, // 0: Left, 1: Center, 2: Right
+            isJumping: false,
+            jumpProgress: 0
+        };
+
+        // Three.js Variables
+        let scene, camera, renderer;
+        let player, playerMesh;
+        let ground;
+        let obstacles = [];
+        let coins = [];
+        let scenery = [];
+        let frameId;
+
+        // DOM Elements
+        const scoreEl = document.getElementById('score');
+        const highScoreEl = document.getElementById('high-score');
+        const finalScoreEl = document.getElementById('final-score');
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const startBtn = document.getElementById('start-btn');
+        const restartBtn = document.getElementById('restart-btn');
+        const controlsHint = document.getElementById('controls-hint');
+
+        // Initialization
+        function init() {
+            // Scene Setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xffe4e1); // لون وردي باهت وناعم للسماء
+            scene.fog = new THREE.Fog(0xffe4e1, 10, 50);   // جعل الضباب يندمج مع السماء الدافئة
+
+            // Camera Setup
+            const isMobile = window.innerWidth < window.innerHeight;
+            const fov = isMobile ? 85 : 60;
+
+            camera = new THREE.PerspectiveCamera(fov, window.innerWidth / window.innerHeight, 0.1, 100);
+            camera.position.set(0, 3, 6);
+            camera.lookAt(0, 0, -5);
+
+            // Renderer Setup
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.getElementById('game-container').appendChild(renderer.domElement);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(10, 20, 10);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 1024;
+            dirLight.shadow.mapSize.height = 1024;
+            scene.add(dirLight);
+
+            // Ground (The Bakery Floor)
+            const groundGeometry = new THREE.PlaneGeometry(100, 200);
+            const groundMaterial = new THREE.MeshBasicMaterial({
+                color: 0xfdf6e2 // لون كريمي دافئ مريح جداً للعين
+            });
+            ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.z = -50;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // Create Player (The Donut)
+            createPlayer();
+
+            // Event Listeners
+            window.addEventListener('resize', onWindowResize, false);
+            document.addEventListener('keydown', handleInput);
+
+            // Touch/Swipe Logic
+            let touchStartX = 0;
+            let touchStartY = 0;
+            document.addEventListener('touchstart', e => {
+                touchStartX = e.changedTouches[0].screenX;
+                touchStartY = e.changedTouches[0].screenY;
+            });
+            document.addEventListener('touchend', e => {
+                const touchEndX = e.changedTouches[0].screenX;
+                const touchEndY = e.changedTouches[0].screenY;
+                handleSwipe(touchStartX, touchStartY, touchEndX, touchEndY);
+            });
+
+            // Start Buttons
+            startBtn.addEventListener('click', startGame);
+            restartBtn.addEventListener('click', resetGame);
+
+            // Initial Render
+            renderer.render(scene, camera);
+        }
+
+        function createPlayer() {
+            // Group for player to handle rotation independently
+            player = new THREE.Group();
+
+            // Donut Geometry (Torus)
+            const geometry = new THREE.TorusGeometry(0.5, 0.25, 16, 32);
+            const material = new THREE.MeshStandardMaterial({ color: 0xFF69B4 }); // Hot Pink
+            playerMesh = new THREE.Mesh(geometry, material);
+            playerMesh.castShadow = true;
+
+            // Add some "sprinkles" (small boxes)
+            const colors = [0xffff00, 0x00ffff, 0xffffff];
+            for (let i = 0; i < 5; i++) {
+                const sGeo = new THREE.BoxGeometry(0.05, 0.05, 0.1);
+                const sMat = new THREE.MeshBasicMaterial({ color: colors[i % colors.length] });
+                const sprinkle = new THREE.Mesh(sGeo, sMat);
+                sprinkle.position.set(
+                    (Math.random() - 0.5) * 0.5,
+                    (Math.random() - 0.5) * 0.5,
+                    0.2
+                );
+                sprinkle.rotation.set(Math.random(), Math.random(), Math.random());
+                playerMesh.add(sprinkle);
+            }
+
+            player.add(playerMesh);
+            scene.add(player);
+
+            // Initial Position
+            updatePlayerPosition();
+        }
+
+        function createObstacle(zPos) {
+            // Type: 0 = Coffee Cup, 1 = Milk Carton, 2 = Giant Donut
+            const rand = Math.random();
+            let type;
+            if (rand < 0.33) type = 0;
+            else if (rand < 0.66) type = 1;
+            else type = 2;
+
+            const lane = Math.floor(Math.random() * 3);
+            const group = new THREE.Group();
+
+            if (type === 0) {
+                // Coffee Cup
+                const cupGeo = new THREE.CylinderGeometry(0.4, 0.3, 0.8, 12);
+                const cupMat = new THREE.MeshStandardMaterial({ color: 0x6F4E37 }); // Coffee Brown
+                const cup = new THREE.Mesh(cupGeo, cupMat);
+                cup.position.y = 0.4;
+                cup.castShadow = true;
+
+                // Lid
+                const lidGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.1, 12);
+                const lidMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+                const lid = new THREE.Mesh(lidGeo, lidMat);
+                lid.position.y = 0.85;
+
+                group.add(cup);
+                group.add(lid);
+            } else if (type === 1) {
+                // Milk Carton
+                const boxGeo = new THREE.BoxGeometry(0.7, 1, 0.7);
+                const boxMat = new THREE.MeshStandardMaterial({ color: 0xEEEEE0 }); // Milk White
+                const carton = new THREE.Mesh(boxGeo, boxMat);
+                carton.position.y = 0.5;
+                carton.castShadow = true;
+
+                // Top detail
+                const topPart = new THREE.Mesh(
+                    new THREE.ConeGeometry(0.5, 0.4, 4),
+                    new THREE.MeshStandardMaterial({ color: 0xDDDDD0 })
+                );
+                topPart.position.y = 1.2;
+                topPart.rotation.y = Math.PI / 4;
+
+                group.add(carton);
+                group.add(topPart);
+            } else {
+                // Giant Rolling Chocolate Donut
+                const donutGeo = new THREE.TorusGeometry(0.6, 0.3, 16, 32);
+                const donutMat = new THREE.MeshStandardMaterial({ color: 0x8B4513 }); // Chocolate
+                const donut = new THREE.Mesh(donutGeo, donutMat);
+                donut.position.y = 0.9;
+                donut.castShadow = true;
+                group.add(donut);
+                group.userData.isRolling = true; // Flag to animate rotation
+            }
+
+            group.position.set(LANES[lane], 0, zPos);
+
+            // Store metadata for collision
+            group.userData.type = 'obstacle';
+            group.userData.hit = false;
+
+            scene.add(group);
+            obstacles.push(group);
+        }
+
+        function createCoin(zPos) {
+            // Place coin in a lane that might not have an obstacle, or above one
+            const lane = Math.floor(Math.random() * 3);
+
+            const geometry = new THREE.CylinderGeometry(0.3, 0.3, 0.05, 16);
+            geometry.rotateX(Math.PI / 2);
+            const material = new THREE.MeshStandardMaterial({ color: 0xFFD700, metalness: 0.8, roughness: 0.2 });
+            const coin = new THREE.Mesh(geometry, material);
+
+            coin.position.set(LANES[lane], 0.5, zPos);
+            coin.userData = { type: 'coin', hit: false };
+
+            scene.add(coin);
+            coins.push(coin);
+        }
+
+        function createScenery(zPos) {
+            // Decorative elements on the sides
+            const side = Math.random() > 0.5 ? 1 : -1;
+            const xPos = side * (LANE_WIDTH * 2 + Math.random() * 5);
+
+            // Random candy cane or lollipop
+            const isLollipop = Math.random() > 0.5;
+            let mesh;
+
+            if (isLollipop) {
+                const group = new THREE.Group();
+                const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 2, 8), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+                stick.position.y = 1;
+                const pop = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 16), new THREE.MeshStandardMaterial({ color: Math.random() * 0xffffff }));
+                pop.position.y = 2;
+                group.add(stick);
+                group.add(pop);
+                mesh = group;
+            } else {
+                // Simple Tree/Bush
+                mesh = new THREE.Mesh(
+                    new THREE.ConeGeometry(1, 3, 8),
+                    new THREE.MeshStandardMaterial({ color: 0x228b22 })
+                );
+                mesh.position.y = 1.5;
+            }
+
+            mesh.position.set(xPos, 0, zPos);
+            scene.add(mesh);
+            scenery.push(mesh);
+        }
+
+        function handleInput(e) {
+            if (!gameState.isPlaying) return;
+
+            switch (e.key) {
+                case 'ArrowLeft':
+                case 'a':
+                    if (gameState.laneIndex > 0) gameState.laneIndex--;
+                    break;
+                case 'ArrowRight':
+                case 'd':
+                    if (gameState.laneIndex < 2) gameState.laneIndex++;
+                    break;
+                case 'ArrowUp':
+                case 'w':
+                case ' ':
+                    if (!gameState.isJumping) {
+                        gameState.isJumping = true;
+                        gameState.jumpProgress = 0;
+                    }
+                    break;
+            }
+        }
+
+        function handleSwipe(startX, startY, endX, endY) {
+            if (!gameState.isPlaying) return;
+
+            const diffX = startX - endX;
+            const diffY = startY - endY;
+
+            if (Math.abs(diffX) > Math.abs(diffY)) {
+                // Horizontal Swipe
+                if (Math.abs(diffX) > 30) {
+                    if (diffX > 0 && gameState.laneIndex > 0) gameState.laneIndex--; // Swipe Left (reversed logic for touch x?) No, start > end means dragged left
+                    else if (diffX < 0 && gameState.laneIndex < 2) gameState.laneIndex++; // Swipe Right
+                }
+            } else {
+                // Vertical Swipe
+                if (diffY > 30 && !gameState.isJumping) { // Swipe Up
+                    gameState.isJumping = true;
+                    gameState.jumpProgress = 0;
+                }
+            }
+        }
+
+        function updatePlayerPosition() {
+            // Smooth lerp for lane changing
+            const targetX = LANES[gameState.laneIndex];
+            player.position.x += (targetX - player.position.x) * 0.2;
+
+            // Jump Physics (Simple Sine Wave)
+            if (gameState.isJumping) {
+                gameState.jumpProgress += 0.03; // Speed of jump
+                if (gameState.jumpProgress >= Math.PI) {
+                    gameState.isJumping = false;
+                    player.position.y = 0;
+                } else {
+                    player.position.y = Math.sin(gameState.jumpProgress) * JUMP_HEIGHT;
+                }
+            }
+
+            // Rotation effect while moving
+            playerMesh.rotation.y += 0.05; // Spin continuously
+            playerMesh.rotation.x = Math.sin(Date.now() * 0.005) * 0.2; // Slight bobble
+        }
+
+        function updateGame() {
+            if (!gameState.isPlaying) return;
+
+            // Update Score
+            gameState.score += 1;
+            scoreEl.innerText = Math.floor(gameState.score / 10);
+
+            // Increase Speed slowly
+            gameState.speed += 0.0001;
+            if (gameState.speed > 1.2) gameState.speed = 1.2;
+
+            // Move Obstacles
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                let ob = obstacles[i];
+                ob.position.z += gameState.speed;
+
+                // Rotate if it's a rolling donut
+                if (ob.userData.isRolling) {
+                    ob.children[0].rotation.x += 0.1;
+                }
+
+                // Collision Detection
+                // Simple box collision approximation
+                const dx = Math.abs(ob.position.x - player.position.x);
+                const dz = Math.abs(ob.position.z - player.position.z);
+                const dy = Math.abs(ob.position.y - player.position.y);
+
+                if (dz < 1 && dx < 0.8 && dy < 1) {
+                    gameOver();
+                }
+
+                // Remove if behind camera
+                if (ob.position.z > 10) {
+                    scene.remove(ob);
+                    obstacles.splice(i, 1);
+                }
+            }
+
+            // Move Coins
+            for (let i = coins.length - 1; i >= 0; i--) {
+                let coin = coins[i];
+                coin.position.z += gameState.speed;
+                coin.rotation.z += 0.1; // Spin coin
+
+                const dx = Math.abs(coin.position.x - player.position.x);
+                const dz = Math.abs(coin.position.z - player.position.z);
+                const dy = Math.abs(coin.position.y - player.position.y);
+
+                if (dz < 1 && dx < 0.8 && dy < 1) {
+                    // Collect Coin
+                    gameState.score += 500; // Bonus points
+                    scene.remove(coin);
+                    coins.splice(i, 1);
+
+                    // Visual feedback could go here
+                } else if (coin.position.z > 10) {
+                    scene.remove(coin);
+                    coins.splice(i, 1);
+                }
+            }
+
+            // Move Scenery
+            for (let i = scenery.length - 1; i >= 0; i--) {
+                let sc = scenery[i];
+                sc.position.z += gameState.speed;
+                if (sc.position.z > 10) {
+                    scene.remove(sc);
+                    scenery.splice(i, 1);
+                }
+            }
+
+            // Spawn Logic
+            if (Math.random() < 0.03) createObstacle(-60); // Spawn far ahead
+            if (Math.random() < 0.05) createCoin(-60);
+            if (Math.random() < 0.1) createScenery(-60);
+
+            updatePlayerPosition();
+
+            renderer.render(scene, camera);
+            frameId = requestAnimationFrame(updateGame);
+        }
+
+        function startGame() {
+            startScreen.classList.add('opacity-0', 'pointer-events-none');
+            gameOverScreen.classList.add('hidden');
+
+            // Show hints briefly
+            controlsHint.classList.remove('opacity-0');
+            setTimeout(() => {
+                controlsHint.classList.add('opacity-0');
+            }, 3000);
+
+            resetGameState();
+            gameState.isPlaying = true;
+            updateGame();
+        }
+
+        function resetGame() {
+            gameOverScreen.classList.add('hidden');
+            resetGameState();
+            gameState.isPlaying = true;
+            updateGame();
+        }
+
+        function resetGameState() {
+            gameState.score = 0;
+            gameState.speed = GAME_SPEED_START;
+            gameState.laneIndex = 1;
+            gameState.isJumping = false;
+            player.position.set(0, 0, 0);
+
+            // Clear Scene Objects
+            obstacles.forEach(o => scene.remove(o));
+            coins.forEach(o => scene.remove(o));
+            scenery.forEach(o => scene.remove(o));
+            obstacles = [];
+            coins = [];
+            scenery = [];
+        }
+
+        function gameOver() {
+            gameState.isPlaying = false;
+            cancelAnimationFrame(frameId);
+
+            finalScoreEl.innerText = Math.floor(gameState.score / 10);
+
+            if (gameState.score > gameState.highScore) {
+                gameState.highScore = gameState.score;
+                highScoreEl.innerText = Math.floor(gameState.highScore / 10);
+            }
+
+            gameOverScreen.classList.remove('hidden');
+        }
+
+        function onWindowResize() {
+            const isMobile = window.innerWidth < window.innerHeight;
+            camera.fov = isMobile ? 85 : 60; // توسيع زاوية الرؤية تلقائياً على الجوال
+
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        // Start everything
+        init();
+
+    </script>
+</body>
+
+</html>
