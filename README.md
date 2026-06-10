@@ -40,7 +40,7 @@ Bounding Box Collision Detection: The volumetric distance between the player's o
 * **Reliance on External CDN Links:** Libraries (Three.js and Tailwind) are loaded directly from fast servers, reducing the project file size and enabling it to open instantly.
 * **Memory Management (Object Disposal):** Objects that extend beyond the camera's position ($Z > 10$) are automatically removed from the scene and array storage to maintain a stable frame rate (FPS) and prevent memory leaks during extended gameplay.
 
-##  Quick Start & Deployment
+#  Quick Start & Deployment
 
 ###  Play Live Instantly
 No installation required! You can play the game directly in your browser via GitHub Pages:
