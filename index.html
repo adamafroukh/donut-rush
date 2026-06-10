@@ -124,7 +124,7 @@
         const LANE_WIDTH = 3; // Width of each lane
         const LANES = [-LANE_WIDTH, 0, LANE_WIDTH]; // Left, Center, Right
         const GAME_SPEED_START = 0.4;
-        const JUMP_HEIGHT = 2.5;
+        const JUMP_HEIGHT = 2.6; // 💡 زيادة الارتفاع لتطير الدونات بشكل أعلى واحترافي
         const JUMP_DURATION = 0.6; // Seconds
 
         // State
@@ -146,6 +146,7 @@
         let coins = [];
         let scenery = [];
         let frameId;
+        let clock = new THREE.Clock();
 
         // DOM Elements
         const scoreEl = document.getElementById('score');
@@ -418,14 +419,14 @@
             }
         }
 
-        function updatePlayerPosition() {
-            // Smooth lerp for lane changing
+        function updatePlayerPosition(delta = 0) {
+            // Smooth lerp for lane changing (تظل كما هي)
             const targetX = LANES[gameState.laneIndex];
             player.position.x += (targetX - player.position.x) * 0.2;
 
-            // Jump Physics (Simple Sine Wave)
+            // Jump Physics بناءً على الوقت الفعلي المنقضي
             if (gameState.isJumping) {
-                gameState.jumpProgress += 0.03; // Speed of jump
+                gameState.jumpProgress += 2.2 * delta; // 💡 تقليل الرقم لجعل القفزة بطيئة وممتعة في الهواء
                 if (gameState.jumpProgress >= Math.PI) {
                     gameState.isJumping = false;
                     player.position.y = 0;
@@ -434,34 +435,37 @@
                 }
             }
 
-            // Rotation effect while moving
-            playerMesh.rotation.y += 0.05; // Spin continuously
-            playerMesh.rotation.x = Math.sin(Date.now() * 0.005) * 0.2; // Slight bobble
+            // دوران الدونات بانتظام بالثانية
+            playerMesh.rotation.y += 3 * delta;
+            playerMesh.rotation.x = Math.sin(Date.now() * 0.005) * 0.2;
         }
 
         function updateGame() {
             if (!gameState.isPlaying) return;
 
-            // Update Score
-            gameState.score += 1;
+            // جلب الوقت المنقضي بين كل إطار (Delta Time)
+            const delta = clock.getDelta();
+
+            // تحديث النتيجة بناءً على الوقت الفعلي المنقضي
+            gameState.score += delta * 100;
             scoreEl.innerText = Math.floor(gameState.score / 10);
 
-            // Increase Speed slowly
-            gameState.speed += 0.0001;
-            if (gameState.speed > 1.2) gameState.speed = 1.2;
+            // زيادة السرعة تدريجياً بمرور الثواني (تعديل القيمة لتناسب الـ delta)
+            gameState.speed += 0.005 * delta;
+            if (gameState.speed > 2.5) gameState.speed = 2.5;
 
             // Move Obstacles
             for (let i = obstacles.length - 1; i >= 0; i--) {
                 let ob = obstacles[i];
-                ob.position.z += gameState.speed;
+                // ضرب السرعة في الـ delta وعامل تطبيع الحجم (60)
+                ob.position.z += gameState.speed * delta * 60;
 
-                // Rotate if it's a rolling donut
+                // تحريك دوران مجسم الشوكولاتة بشكل منتظم بالثانية
                 if (ob.userData.isRolling) {
-                    ob.children[0].rotation.x += 0.1;
+                    ob.children[0].rotation.x += 10 * delta;
                 }
 
                 // Collision Detection
-                // Simple box collision approximation
                 const dx = Math.abs(ob.position.x - player.position.x);
                 const dz = Math.abs(ob.position.z - player.position.z);
                 const dy = Math.abs(ob.position.y - player.position.y);
@@ -480,20 +484,17 @@
             // Move Coins
             for (let i = coins.length - 1; i >= 0; i--) {
                 let coin = coins[i];
-                coin.position.z += gameState.speed;
-                coin.rotation.z += 0.1; // Spin coin
+                coin.position.z += gameState.speed * delta * 60;
+                coin.rotation.z += 5 * delta; // دوران العملة بالثانية
 
                 const dx = Math.abs(coin.position.x - player.position.x);
                 const dz = Math.abs(coin.position.z - player.position.z);
                 const dy = Math.abs(coin.position.y - player.position.y);
 
                 if (dz < 1 && dx < 0.8 && dy < 1) {
-                    // Collect Coin
                     gameState.score += 500; // Bonus points
                     scene.remove(coin);
                     coins.splice(i, 1);
-
-                    // Visual feedback could go here
                 } else if (coin.position.z > 10) {
                     scene.remove(coin);
                     coins.splice(i, 1);
@@ -503,7 +504,7 @@
             // Move Scenery
             for (let i = scenery.length - 1; i >= 0; i--) {
                 let sc = scenery[i];
-                sc.position.z += gameState.speed;
+                sc.position.z += gameState.speed * delta * 60;
                 if (sc.position.z > 10) {
                     scene.remove(sc);
                     scenery.splice(i, 1);
@@ -511,17 +512,21 @@
             }
 
             // Spawn Logic
-            if (Math.random() < 0.03) createObstacle(-60); // Spawn far ahead
+            if (Math.random() < 0.03) createObstacle(-60);
             if (Math.random() < 0.05) createCoin(-60);
             if (Math.random() < 0.1) createScenery(-60);
 
-            updatePlayerPosition();
+            // تمرير قيمة الـ delta لدالة تحريك اللاعب لتنعيم القفز والدوران
+            updatePlayerPosition(delta);
 
             renderer.render(scene, camera);
             frameId = requestAnimationFrame(updateGame);
         }
 
         function startGame() {
+            // 1. صَفّر الساعة فوراً في أول السطر لتتخلص من وقت الانتظار في القائمة الرئيسية
+            clock.getDelta(); 
+
             startScreen.classList.add('opacity-0', 'pointer-events-none');
             gameOverScreen.classList.add('hidden');
 
@@ -537,6 +542,9 @@
         }
 
         function resetGame() {
+            // 2. صَفّر الساعة هنا أيضاً لمنع الاختفاء عند إعادة اللعب بعد الموت
+            clock.getDelta(); 
+
             gameOverScreen.classList.add('hidden');
             resetGameState();
             gameState.isPlaying = true;
