@@ -446,9 +446,9 @@
             // جلب الوقت المنقضي بين كل إطار (Delta Time)
             const delta = clock.getDelta();
 
-            // تحديث النتيجة بناءً على الوقت الفعلي المنقضي
-            gameState.score += delta * 100;
-            scoreEl.innerText = Math.floor(gameState.score / 10);
+            // زيادة النتيجة بمعدل متزن (نقطة واحدة لكل ثانية صمود)
+            gameState.score += delta * 1;
+            scoreEl.innerText = Math.floor(gameState.score);
 
             // زيادة السرعة تدريجياً بمرور الثواني (تعديل القيمة لتناسب الـ delta)
             gameState.speed += 0.005 * delta;
@@ -492,7 +492,7 @@
                 const dy = Math.abs(coin.position.y - player.position.y);
 
                 if (dz < 1 && dx < 0.8 && dy < 1) {
-                    gameState.score += 500; // Bonus points
+                    gameState.score += 3; // 🪙 تعديل مكافأة العملة لتصبح 3 نقاط بدلاً من 5
                     scene.remove(coin);
                     coins.splice(i, 1);
                 } else if (coin.position.z > 10) {
@@ -525,7 +525,7 @@
 
         function startGame() {
             // 1. صَفّر الساعة فوراً في أول السطر لتتخلص من وقت الانتظار في القائمة الرئيسية
-            clock.getDelta(); 
+            clock.getDelta();
 
             startScreen.classList.add('opacity-0', 'pointer-events-none');
             gameOverScreen.classList.add('hidden');
@@ -543,7 +543,7 @@
 
         function resetGame() {
             // 2. صَفّر الساعة هنا أيضاً لمنع الاختفاء عند إعادة اللعب بعد الموت
-            clock.getDelta(); 
+            clock.getDelta();
 
             gameOverScreen.classList.add('hidden');
             resetGameState();
@@ -571,11 +571,12 @@
             gameState.isPlaying = false;
             cancelAnimationFrame(frameId);
 
-            finalScoreEl.innerText = Math.floor(gameState.score / 10);
+            // عرض النتيجة الفعلية بدون قسمة
+            finalScoreEl.innerText = Math.floor(gameState.score);
 
             if (gameState.score > gameState.highScore) {
                 gameState.highScore = gameState.score;
-                highScoreEl.innerText = Math.floor(gameState.highScore / 10);
+                highScoreEl.innerText = Math.floor(gameState.highScore);
             }
 
             gameOverScreen.classList.remove('hidden');
