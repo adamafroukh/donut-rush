@@ -148,7 +148,7 @@
         let frameId;
         let clock = new THREE.Clock();
         let spawnTimer = 0;
-        const SPAWN_INTERVAL = 0.25; // توليد عنصر جديد كل نصف ثانية حقيقية لتوفر توازن مثالي
+        const SPAWN_INTERVAL = 0.35; // توليد عنصر جديد كل نصف ثانية حقيقية لتوفر توازن مثالي
 
         // DOM Elements
         const scoreEl = document.getElementById('score');
@@ -437,7 +437,7 @@
 
             // Jump Physics بناءً على الوقت الفعلي المنقضي
             if (gameState.isJumping) {
-                gameState.jumpProgress += 2.2 * delta; // 💡 تقليل الرقم لجعل القفزة بطيئة وممتعة في الهواء
+                gameState.jumpProgress += 2.2 * delta; // ستصبح القفزة أسرع في الصعود والهبوط لكن بنفس النعومة الفيزيائية!
                 if (gameState.jumpProgress >= Math.PI) {
                     gameState.isJumping = false;
                     player.position.y = 0;
@@ -532,8 +532,8 @@
             if (spawnTimer >= SPAWN_INTERVAL) {
                 const rand = Math.random();
 
-                // تعديل متوازن: 65% عقبة للحفاظ على التحدي، و 35% توكنز مكافأة للاعب
-                if (rand < 0.65) {
+                // تعديل مريح: 50% عقبة و 50% توكنز لتقليل الازدحام وصعوبة المضمار
+                if (rand < 0.50) {
                     createObstacle(-60);
                 } else {
                     createCoin(-60);
