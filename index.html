@@ -123,7 +123,7 @@
         // Game Constants
         const LANE_WIDTH = 3; // Width of each lane
         const LANES = [-LANE_WIDTH, 0, LANE_WIDTH]; // Left, Center, Right
-        const GAME_SPEED_START = 0.4;
+        const GAME_SPEED_START = 15.0; // رفعنا القيمة لأننا سنلغي عملية الضرب في 60 لاحقاً
         const JUMP_HEIGHT = 2.6; // 💡 زيادة الارتفاع لتطير الدونات بشكل أعلى واحترافي
         const JUMP_DURATION = 0.6; // Seconds
 
@@ -147,6 +147,8 @@
         let scenery = [];
         let frameId;
         let clock = new THREE.Clock();
+        let spawnTimer = 0;
+        const SPAWN_INTERVAL = 0.25; // توليد عنصر جديد كل نصف ثانية حقيقية لتوفر توازن مثالي
 
         // DOM Elements
         const scoreEl = document.getElementById('score');
@@ -331,10 +333,19 @@
             // Place coin in a lane that might not have an obstacle, or above one
             const lane = Math.floor(Math.random() * 3);
 
-            const geometry = new THREE.CylinderGeometry(0.3, 0.3, 0.05, 16);
+            const geometry = new THREE.CylinderGeometry(0.35, 0.35, 0.08, 16); // جعل الحجم أكبر وأكثر وضوحاً
             geometry.rotateX(Math.PI / 2);
-            const material = new THREE.MeshStandardMaterial({ color: 0xFFD700, metalness: 0.8, roughness: 0.2 });
+
+            // مادة ذهبية ذات بريق ذاتي ومقاومة للعتامة
+            const material = new THREE.MeshStandardMaterial({
+                color: 0xFFD700,      // لون الذهب الصافي
+                metalness: 0.3,       // تقليلها لكي لا تصبح مرآة تعكس الفراغ المعتم
+                roughness: 0.2,       // إعطاء خشونة بسيطة لتوزيع الضوء بالتساوي على العملة
+                emissive: 0xcca100,   // زيادة التوهج الذاتي الذهبي لتبدو مضيئة ومميزة عن الأكواب
+                emissiveIntensity: 0.3
+            });
             const coin = new THREE.Mesh(geometry, material);
+            coin.castShadow = true;   // تفعيل استقبال وإسقاط الظلال
 
             coin.position.set(LANES[lane], 0.5, zPos);
             coin.userData = { type: 'coin', hit: false };
@@ -451,14 +462,15 @@
             scoreEl.innerText = Math.floor(gameState.score);
 
             // زيادة السرعة تدريجياً بمرور الثواني (تعديل القيمة لتناسب الـ delta)
-            gameState.speed += 0.005 * delta;
-            if (gameState.speed > 2.5) gameState.speed = 2.5;
+            // زيادة السرعة تدريجياً بشكل ناعم وثابت يتناسب مع الحسابات الجديدة بالثانية
+            gameState.speed += 0.15 * delta;
+            if (gameState.speed > 40.0) gameState.speed = 40.0; // حد أقصى منطقي وممتع للسرعة
 
             // Move Obstacles
             for (let i = obstacles.length - 1; i >= 0; i--) {
                 let ob = obstacles[i];
                 // ضرب السرعة في الـ delta وعامل تطبيع الحجم (60)
-                ob.position.z += gameState.speed * delta * 60;
+                ob.position.z += gameState.speed * delta;
 
                 // تحريك دوران مجسم الشوكولاتة بشكل منتظم بالثانية
                 if (ob.userData.isRolling) {
@@ -484,7 +496,7 @@
             // Move Coins
             for (let i = coins.length - 1; i >= 0; i--) {
                 let coin = coins[i];
-                coin.position.z += gameState.speed * delta * 60;
+                coin.position.z += gameState.speed * delta;
                 coin.rotation.z += 5 * delta; // دوران العملة بالثانية
 
                 const dx = Math.abs(coin.position.x - player.position.x);
@@ -492,7 +504,7 @@
                 const dy = Math.abs(coin.position.y - player.position.y);
 
                 if (dz < 1 && dx < 0.8 && dy < 1) {
-                    gameState.score += 3; // 🪙 تعديل مكافأة العملة لتصبح 3 نقاط بدلاً من 5
+                    gameState.score += 10; // 🪙 تعديل مكافأة العملة لتصبح 10 نقاط بدلاً من 3
                     scene.remove(coin);
                     coins.splice(i, 1);
                 } else if (coin.position.z > 10) {
@@ -504,7 +516,7 @@
             // Move Scenery
             for (let i = scenery.length - 1; i >= 0; i--) {
                 let sc = scenery[i];
-                sc.position.z += gameState.speed * delta * 60;
+                sc.position.z += gameState.speed * delta;
                 if (sc.position.z > 10) {
                     scene.remove(sc);
                     scenery.splice(i, 1);
@@ -512,9 +524,28 @@
             }
 
             // Spawn Logic
-            if (Math.random() < 0.03) createObstacle(-60);
-            if (Math.random() < 0.05) createCoin(-60);
-            if (Math.random() < 0.1) createScenery(-60);
+            // منطق توليد عادل يعتمد على الثواني الحقيقية وليس سرعة الشاشات
+            // معامل ديناميكي: يجعل مؤقت التوليد يركض أسرع كلما أسرعت اللعبة!
+            let speedFactor = gameState.speed / GAME_SPEED_START;
+            spawnTimer += delta * speedFactor;
+
+            if (spawnTimer >= SPAWN_INTERVAL) {
+                const rand = Math.random();
+
+                // تعديل متوازن: 65% عقبة للحفاظ على التحدي، و 35% توكنز مكافأة للاعب
+                if (rand < 0.65) {
+                    createObstacle(-60);
+                } else {
+                    createCoin(-60);
+                }
+
+                // توليد ديكور جانبي مكثف بنسبة 85% لزيادة متعة التدفق البصري
+                if (Math.random() < 0.85) {
+                    createScenery(-60);
+                }
+
+                spawnTimer = 0; // إعادة تصفير المؤقت للدورة القادمة
+            }
 
             // تمرير قيمة الـ delta لدالة تحريك اللاعب لتنعيم القفز والدوران
             updatePlayerPosition(delta);
