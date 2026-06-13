@@ -40,25 +40,8 @@ Bounding Box Collision Detection: The volumetric distance between the player's o
 * **Reliance on External CDN Links:** Libraries (Three.js and Tailwind) are loaded directly from fast servers, reducing the project file size and enabling it to open instantly.
 * **Memory Management (Object Disposal):** Objects that extend beyond the camera's position ($Z > 10$) are automatically removed from the scene and array storage to maintain a stable frame rate (FPS) and prevent memory leaks during extended gameplay.
 
-#  Quick Start & Deployment
 
-###  Play Live Instantly
+# Play Live Instantly
 No installation required! You can play the game directly in your browser via GitHub Pages:
  **[Play Donut Rush Live Here](https://adamafroukh.github.io/donut-rush/)**
 
----
-
-### How to Run Locally
-
-Since the project is built entirely as a client-side web application within a single file (`index.html`), you can run it on your local machine instantly:
-
-1. **Clone the repository:**
-```bash
-git clone https://github.com/adamafroukh/donut-rush.git
-```
-2. **Navigate to the project folder:**
-```bash
-cd donut-rush
-```
-3. **Launch the game:**
-Simply open the index.html file directly in any modern web browser (Chrome, Firefox, Safari, Edge), click START GAME, and start your sweet escape!
